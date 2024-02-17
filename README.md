@@ -1,66 +1,10 @@
-## Foundry
+# Mini-Exec
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+A minimal smart contract wallet that can be operated from remote chain using
+Polygon LxLy Bridge.
 
-Foundry consists of:
+## Implementation
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
-
-## Documentation
-
-https://book.getfoundry.sh/
-
-## Usage
-
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+1. `MiniExecImplementation` -- the main implementation contract that will receive messages from LxLy bridge, validate that they are from correct owner, correct network and correct bridge contract. The metadata i.e. `remoteOwner` and `remoteNetworkId` is stored in the `MiniExecFactory` contract and is queried before validating the callback.
+2. `MiniExecProxy` -- A simple upgradable proxy that gets its implementation address from `MiniExecFactory`. It can only be upgraded if it itself calls `updateImplementation`, i.e. the call itself needs to come from the remote owner and network via the LxLy bridge.
+3. `MiniExecFactory` -- Factory contract for people to create accounts. Accounts are created as upgradable proxies i.e. `MiniExecProxy`. It also stores account metadata like `owner` and `networkId`. This metadata is immutable. It also stores the current implementation address for all the account proxies.
