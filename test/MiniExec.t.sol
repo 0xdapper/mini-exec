@@ -1,3 +1,5 @@
+pragma solidity ^0.8.24;
+
 import {Test} from "forge-std/Test.sol";
 import {MiniExecScript} from "script/MiniExec.s.sol";
 import {MiniExecProxy, MiniExecImplementation, MiniExecFactory, ZKEVM_BRIDGE} from "src/MiniExec.sol";
@@ -21,6 +23,28 @@ contract MiniExecTest is Test, MiniExecScript {
         account = MiniExecProxy(payable(factory.createAccount(remoteOwner, remoteNetworkId)));
     }
 
+    // @OF: more extensive testing please
+    // @OF: for example use the following contract, and test calls that will succeed and revert (and check that referenceValue changes)
+    /*
+    contract MockContract { 
+        address immutable referenceAddr;
+        uint256 public referenceValue;
+
+        constructor(address a) {
+            referenceAddr = a;
+        }
+
+        function someFunction(address a, uint256 u) {
+            assert(a == referenceAddr);
+            referenceValue = u;
+        }
+    }
+    */
+    // @OF: what happens if calldata is empty (in the default implementation)?
+
+    // @OF: split success/revert tests into different functions
+
+    // @OF: better naming, e.g. what is it testing?
     function testMiniExecSender() external {
         vm.expectCall(address(0x01), 0, hex"12");
         _receiveMessage(remoteOwner, remoteNetworkId, abi.encode(address(0x01), 0, hex"12"), 0, true);
@@ -67,7 +91,7 @@ contract MiniExecTest is Test, MiniExecScript {
         assertEq(
             factory.implementations(address(account)),
             address(anotherImplementation),
-            "update implementation didnt work"
+            "update implementation didnt work" // @OF: redundant error msg
         );
 
         vm.expectRevert(AnotherImplementation.AlwaysReverts.selector);
