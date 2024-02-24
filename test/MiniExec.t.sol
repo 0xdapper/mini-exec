@@ -1,7 +1,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {MiniExecScript} from "script/MiniExec.s.sol";
+import {DeployMiniExecFactoryScript} from "script/MiniExec.s.sol";
 import {MiniExecProxy, MiniExecImplementation, MiniExecFactory, ZKEVM_BRIDGE} from "src/MiniExec.sol";
 
 contract AnotherImplementation {
@@ -12,7 +12,21 @@ contract AnotherImplementation {
     }
 }
 
-contract MiniExecTest is Test, MiniExecScript {
+contract MockContract {
+    uint256 public a;
+
+    function increment() external {
+        a += 1;
+    }
+
+    function decremenet() external {
+        a -= 1;
+    }
+
+    function depositEth() external payable {}
+}
+
+contract MiniExecTest is Test, DeployMiniExecFactoryScript {
     MiniExecProxy account;
     address remoteOwner = makeAddr("remoteOwner");
     address remoteRando = makeAddr("remoteRando");
@@ -23,29 +37,47 @@ contract MiniExecTest is Test, MiniExecScript {
         account = MiniExecProxy(payable(factory.createAccount(remoteOwner, remoteNetworkId)));
     }
 
-    // @OF: more extensive testing please
-    // @OF: for example use the following contract, and test calls that will succeed and revert (and check that referenceValue changes)
-    /*
-    contract MockContract { 
-        address immutable referenceAddr;
-        uint256 public referenceValue;
+    function testCallsCorrectly() external {
+        MockContract mockContract = new MockContract();
 
-        constructor(address a) {
-            referenceAddr = a;
-        }
+        uint256 a = mockContract.a();
+        _receiveMessage(
+            remoteOwner,
+            remoteNetworkId,
+            abi.encode(address(mockContract), 0, abi.encodeCall(MockContract.increment, ())),
+            0,
+            true
+        );
+        assertEq(mockContract.a(), a + 1);
 
-        function someFunction(address a, uint256 u) {
-            assert(a == referenceAddr);
-            referenceValue = u;
-        }
+        _receiveMessage(
+            remoteOwner,
+            remoteNetworkId,
+            abi.encode(address(mockContract), 0, abi.encodeCall(MockContract.decremenet, ())),
+            0,
+            true
+        );
+        assertEq(mockContract.a(), a);
+
+        uint256 balBefore = address(mockContract).balance;
+        vm.deal(address(account), 1 ether);
+        _receiveMessage(
+            remoteOwner,
+            remoteNetworkId,
+            abi.encode(address(mockContract), 0.5 ether, abi.encodeCall(MockContract.depositEth, ())),
+            0,
+            true
+        );
+        assertEq(address(account).balance, 0.5 ether);
+        assertEq(address(mockContract).balance, balBefore + 0.5 ether);
     }
-    */
-    // @OF: what happens if calldata is empty (in the default implementation)?
 
-    // @OF: split success/revert tests into different functions
+    function testCalldataEmptyRevert() external {
+        vm.expectRevert(MiniExecImplementation.MiniExec__EmptyCalldata.selector);
+        _receiveMessage(remoteOwner, remoteNetworkId, hex"", 0, true);
+    }
 
-    // @OF: better naming, e.g. what is it testing?
-    function testMiniExecSender() external {
+    function testValidMiniExecSender() external {
         vm.expectCall(address(0x01), 0, hex"12");
         _receiveMessage(remoteOwner, remoteNetworkId, abi.encode(address(0x01), 0, hex"12"), 0, true);
 
@@ -53,7 +85,7 @@ contract MiniExecTest is Test, MiniExecScript {
         _receiveMessage(remoteOwner, remoteNetworkId, abi.encode(address(0x01), 0, hex"12"), 0, false);
     }
 
-    function testMiniExecRemoteSender() external {
+    function testValidMiniExecRemoteSender() external {
         vm.deal(address(account), 1 ether);
         vm.expectCall(address(0x02), 0.1 ether, hex"34");
         _receiveMessage(remoteOwner, remoteNetworkId, abi.encode(address(0x02), 0.1 ether, hex"34"), 0, true);
@@ -62,7 +94,7 @@ contract MiniExecTest is Test, MiniExecScript {
         _receiveMessage(remoteRando, remoteNetworkId, abi.encode(address(0x02), 0.1 ether, hex"34"), 0, true);
     }
 
-    function testMiniExecRemoteNetworkId() external {
+    function testValidExecRemoteNetworkId() external {
         vm.expectCall(address(0x03), 0, hex"56");
         _receiveMessage(remoteOwner, remoteNetworkId, abi.encode(address(0x03), 0, hex"56"), 0, true);
 
@@ -70,7 +102,7 @@ contract MiniExecTest is Test, MiniExecScript {
         _receiveMessage(remoteOwner, remoteNetworkId + 1, abi.encode(address(0x03), 0, hex"34"), 0, true);
     }
 
-    function testMiniExecUpdate() external {
+    function testValidMiniExecUpdate() external {
         AnotherImplementation anotherImplementation = new AnotherImplementation();
 
         vm.expectRevert(MiniExecProxy.OnlySelf.selector);
@@ -87,11 +119,6 @@ contract MiniExecTest is Test, MiniExecScript {
             ),
             0,
             true
-        );
-        assertEq(
-            factory.implementations(address(account)),
-            address(anotherImplementation),
-            "update implementation didnt work" // @OF: redundant error msg
         );
 
         vm.expectRevert(AnotherImplementation.AlwaysReverts.selector);
