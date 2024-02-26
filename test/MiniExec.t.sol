@@ -14,16 +14,21 @@ contract AnotherImplementation {
 
 contract MockContract {
     uint256 public a;
+    uint256 public b;
 
     function increment() external {
         a += 1;
     }
 
-    function decremenet() external {
+    function decrement() external {
         a -= 1;
     }
 
     function depositEth() external payable {}
+
+    function setB(uint256 _b) external {
+        b = _b;
+    }
 }
 
 contract MiniExecTest is Test, DeployMiniExecFactoryScript {
@@ -53,7 +58,7 @@ contract MiniExecTest is Test, DeployMiniExecFactoryScript {
         _receiveMessage(
             remoteOwner,
             remoteNetworkId,
-            abi.encode(address(mockContract), 0, abi.encodeCall(MockContract.decremenet, ())),
+            abi.encode(address(mockContract), 0, abi.encodeCall(MockContract.decrement, ())),
             0,
             true
         );
@@ -70,6 +75,18 @@ contract MiniExecTest is Test, DeployMiniExecFactoryScript {
         );
         assertEq(address(account).balance, 0.5 ether);
         assertEq(address(mockContract).balance, balBefore + 0.5 ether);
+
+        uint256 bBefore = mockContract.b();
+        _receiveMessage(
+            remoteOwner,
+            remoteNetworkId,
+            abi.encode(address(mockContract), 0, abi.encodeCall(MockContract.setB, (10))),
+            0,
+            true
+        );
+        uint256 bAfter = mockContract.b();
+        assertTrue(bBefore != bAfter);
+        assertEq(bAfter, 10);
     }
 
     function testCalldataEmptyRevert() external {
