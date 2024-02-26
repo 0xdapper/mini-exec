@@ -39,13 +39,17 @@ contract MiniExecImplementation is MiniExecStorage, IZkEVMBridgeMessageReceiver 
 
 contract MiniExecProxy is Proxy, MiniExecStorage {
     error OnlySelf();
+    error AlreadyInitialized();
 
-    MiniExecFactory immutable creator;
+    bool initialized;
 
-    constructor(address owner, uint32 networkId, address impl) {
+    function initialize(address owner, uint32 networkId, address impl) external {
+        if (initialized) revert AlreadyInitialized();
+
         remoteOwner = owner;
         remoteNetwork = networkId;
         implementation = impl;
+        initialized = true;
     }
 
     function updateImplementation(address _newImplementation) external {
@@ -59,13 +63,46 @@ contract MiniExecProxy is Proxy, MiniExecStorage {
 }
 
 contract MiniExecFactory {
-    MiniExecImplementation public immutable miniExecImplementation;
+    error OnlyOwner();
+    error ZeroAddress();
+
+    event OwnerChanged(address indexed _newOwner);
+    event ImplementationChanged(address indexed _newImplementation);
+    event AccountCreated(address indexed _owner, address indexed _account, uint32 _network);
+
+    address public miniExecImplementation;
+    address public owner;
 
     constructor() {
-        miniExecImplementation = new MiniExecImplementation();
+        miniExecImplementation = address(new MiniExecImplementation());
+        owner = msg.sender;
+        emit OwnerChanged(msg.sender);
+        emit ImplementationChanged(miniExecImplementation);
     }
 
     function createAccount(address _owner, uint32 _networkId) external returns (address) {
-        return address(new MiniExecProxy(_owner, _networkId, address(miniExecImplementation)));
+        MiniExecProxy account = new MiniExecProxy();
+        account.initialize(_owner, _networkId, miniExecImplementation);
+        emit AccountCreated(_owner, address(account), _networkId);
+        return address(account);
+    }
+
+    function setOwner(address _newOwner) external onlyOwner {
+        if (_newOwner == address(0)) revert ZeroAddress();
+        owner = _newOwner;
+        emit OwnerChanged(_newOwner);
+    }
+
+    function changeImplementation(address _newImplementation) external onlyOwner {
+        if (_newImplementation == address(0)) revert ZeroAddress();
+        miniExecImplementation = _newImplementation;
+        emit ImplementationChanged(_newImplementation);
+    }
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) {
+            revert OnlyOwner();
+        }
+        _;
     }
 }
